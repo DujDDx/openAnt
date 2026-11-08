@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 ###############################################################################
 # Claude Desktop over Xpra
 #
@@ -28,6 +26,10 @@ ARG INSTALL_CJK_FONTS=true
 # 是否安装内置浏览器。Claude Desktop 的 OAuth 登录要打开一个浏览器，且回调
 # 落在容器本机，所以浏览器必须装在容器里；设为 false 可显著减小镜像。
 ARG INSTALL_BROWSER=true
+# 是否安装 Clash Verge Rev（容器内代理客户端，窗口同样经 Xpra 转发）
+ARG INSTALL_CLASH_VERGE=true
+# Clash Verge Rev 版本号（对应 GitHub Release 的 tag，不带 v）
+ARG CLASH_VERGE_VERSION=2.5.10
 
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
@@ -50,7 +52,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         dbus \
         dbus-x11 \
         libsecret-1-0 \
-        openbox \
         tini \
         x11-utils \
         xauth \
@@ -133,7 +134,30 @@ RUN set -eux; \
     fi
 
 ###############################################################################
-# 6. 非 root 运行用户
+# 6. Clash Verge Rev（容器内代理客户端）
+#
+# 它和 Claude Desktop 跑在同一个 Xpra 会话里，所以订阅、节点、规则都能在
+# 浏览器里直接点。注意：它的窗口必须真实存在，代理配置才有地方改。
+###############################################################################
+RUN set -eux; \
+    if [ "${INSTALL_CLASH_VERGE}" = "true" ]; then \
+        arch="$(dpkg --print-architecture)"; \
+        case "${arch}" in \
+            amd64|arm64) : ;; \
+            *) echo "Clash Verge Rev 不支持架构: ${arch}" >&2; exit 1 ;; \
+        esac; \
+        deb="Clash.Verge_${CLASH_VERGE_VERSION}_${arch}.deb"; \
+        url="https://github.com/clash-verge-rev/clash-verge-rev/releases/download/v${CLASH_VERGE_VERSION}/${deb}"; \
+        echo "安装 Clash Verge: ${url}"; \
+        curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 "${url}" -o "/tmp/${deb}"; \
+        apt-get update; \
+        apt-get install -y --no-install-recommends "/tmp/${deb}"; \
+        rm -f "/tmp/${deb}"; \
+        rm -rf /var/lib/apt/lists/*; \
+    fi
+
+###############################################################################
+# 7. 非 root 运行用户
 #
 # Electron 的 Chromium 沙箱要求以普通用户运行；.deb 自带的 chrome-sandbox
 # 已经是 root:root 4755，因此默认不需要 --no-sandbox。
@@ -154,7 +178,10 @@ RUN set -eux; \
     chmod 0700 /tmp/runtime-claude /tmp/xpra; \
     chown -R 1000:1000 /home/claude /tmp/runtime-claude /tmp/xpra
 
-COPY --chmod=0755 scripts/ /usr/local/bin/
+COPY scripts/ /usr/local/bin/
+RUN chmod 0755 /usr/local/bin/entrypoint.sh \
+              /usr/local/bin/start-session.sh \
+              /usr/local/bin/open-browser.sh
 
 ENV HOME=/home/claude \
     BROWSER=/usr/local/bin/open-browser.sh

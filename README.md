@@ -5,29 +5,30 @@
 ## 它是怎么工作的
 
 ```
-                    ┌─────────────────── Docker 容器 ───────────────────┐
-   浏览器 / 原生      │                                                   │
-   Xpra 客户端        │   ┌────────┐   ┌──────────────┐   ┌────────────┐  │
-        │            │   │  Xpra  │──▶│     Xvfb     │◀──│   Claude   │  │
-        │  TCP 14500 │   │ server │   │  虚拟 X11    │   │  Desktop   │  │
-        └───────────▶│   │  + HTML5│  │   显示 :100  │   │ (Electron) │  │
-                     │   └────────┘   └──────┬───────┘   └────────────┘  │
-                     │                       │                            │
-                     │                  openbox（窗口管理器）              │
-                     │                                                   │
-                     │   Epiphany 浏览器（仅在容器内完成 OAuth 登录）      │
-                     └───────────────────────────────────────────────────┘
+                    ┌──────────────────── Docker 容器 ─────────────────────┐
+   浏览器 / 原生      │                                                      │
+   Xpra 客户端        │   ┌────────┐   ┌──────────────┐   ┌───────────────┐  │
+        │            │   │  Xpra  │──▶│     Xvfb     │◀──│     Claude    │  │
+        │  TCP 14500 │   │ server │   │  虚拟 X11    │   │    Desktop    │  │
+        └───────────▶│   │  + HTML5│  │   显示 :100  │   ├───────────────┤  │
+                     │   └────────┘   └──────┬───────┘   │  Clash Verge  │  │
+                     │                       │           │   （代理）     │  │
+                     │            Xpra seamless 窗口管理  └───────────────┘  │
+                     │                                                      │
+                     │   Epiphany 浏览器（仅在容器内完成 OAuth 登录）         │
+                     └──────────────────────────────────────────────────────┘
 ```
 
 - **Xvfb** 提供一块虚拟屏幕，不需要真实显示器。
 - **Xpra** 把这块屏幕上的窗口变化编码成 Xpra 协议；同一个端口还内置了 **HTML5 客户端**，所以浏览器直接访问 `http://<主机>:14500/` 就能用。
-- **openbox** 让 Electron 窗口能正常最大化、最小化和带边框。
+- Xpra 的 seamless 模式**自带窗口管理**，每个顶层窗口单独转发，不需要额外装窗口管理器。
+- **Clash Verge Rev**（可选）跑在同一个会话里，订阅、节点、规则都在浏览器里直接配，Claude Desktop 通过它的混合端口出网。
 - 断开连接后 Claude Desktop 仍在容器里运行，重新连上即可继续——这是 Xpra 相对 VNC 的核心优势。
 
 ## 前置条件
 
 - Docker（含 `docker compose`）
-- 构建时能访问 `downloads.claude.ai`（Claude Desktop 官方源）和 `xpra.org`（Xpra 官方源）
+- 构建时能访问 `downloads.claude.ai`（Claude Desktop 官方源）、`xpra.org`（Xpra 官方源）和 `github.com`（Clash Verge 的发布包）
 
 ## 快速开始
 
@@ -70,6 +71,23 @@ Claude Desktop 使用 OAuth 登录：点击「登录」后，它会在容器内�
 
 > 浏览器必须装在容器里，因为 OAuth 的回调地址指向容器自己的 `127.0.0.1`。如果把 `INSTALL_BROWSER` 设为 `false`，就只能先在别的 Linux 机器上登录，再把 `~/.config/Claude` 拷贝进卷里。
 
+## 在容器里配置 Clash Verge 代理
+
+镜像内置了 [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev)，它的窗口和 Claude Desktop 一起经 Xpra 转发，所以整个代理配置过程都能在浏览器里完成。
+
+1. 打开 `http://<宿主机IP>:14500/`，会同时看到 Claude Desktop 和 Clash Verge 两个窗口。
+2. 在 Clash Verge 里打开「订阅」→ 新建，粘贴订阅链接并导入。
+3. 在「代理」里选一个节点，确认「设置」里的**混合端口**（默认 `7897`）。
+4. Claude Desktop 启动时已经带上 `http_proxy` / `https_proxy` 指向这个端口，代理一就绪就能出网。
+
+几点说明：
+
+- 容器里没有 `NET_ADMIN` 权限，**TUN 模式用不了**；也不需要打开「系统代理」。本镜像通过 `http_proxy` 环境变量直连混合端口，这是容器里最可靠的方式。
+- 端口改过之后，把 `.env` 里的 `PROXY_URL` 或 `CLASH_MIXED_PORT` 同步改掉，再 `docker compose up -d`。
+- Clash Verge 的订阅与配置存在 `claude-data` 卷里，容器重建不会丢。
+- 不想让 Claude 走代理：`ENABLE_PROXY=0`；不想启动 Clash 窗口：`ENABLE_CLASH_VERGE=0`。
+- 首次还没导入订阅时，`ENABLE_PROXY=1` 会让 Claude 连不上网——先去 Clash 里把订阅配好即可。
+
 ## 配置项
 
 `.env` 中的变量：
@@ -85,6 +103,12 @@ Claude Desktop 使用 OAuth 登录：点击「登录」后，它会在容器内�
 | `CLAUDE_GPU` | `0` | 设为 `1` 时不强制软件渲染 |
 | `INSTALL_CJK_FONTS` | `true` | 是否安装中日韩字体 |
 | `INSTALL_BROWSER` | `true` | 是否安装容器内浏览器（登录需要） |
+| `INSTALL_CLASH_VERGE` | `true` | 是否安装 Clash Verge Rev |
+| `CLASH_VERGE_VERSION` | `2.5.10` | Clash Verge Rev 版本 |
+| `ENABLE_CLASH_VERGE` | `1` | 启动时是否拉起 Clash Verge 窗口 |
+| `ENABLE_PROXY` | `1` | Claude Desktop 是否走容器内 Clash |
+| `PROXY_URL` | 自动 | 代理地址；留空则读取混合端口，兜底 `http://127.0.0.1:7897` |
+| `CLASH_MIXED_PORT` | 自动 | 强制指定 Clash 混合端口 |
 
 其它可以在容器里直接传的环境变量：
 
@@ -164,6 +188,12 @@ services:
 **中文显示成方块**
 确认 `INSTALL_CJK_FONTS=true`（默认），然后重新 `docker compose build`。
 
+**Claude 一直转圈 / 无法联网**
+多半是代理没配好。打开 Clash Verge 窗口确认订阅已导入、节点可用；临时排查可以先设 `ENABLE_PROXY=0` 再重启，确认是代理问题。
+
+**Clash Verge 窗口没出现**
+确认 `ENABLE_CLASH_VERGE=1` 且镜像里装了它（`INSTALL_CLASH_VERGE=true` 时需要重新 `docker compose build`）。它启动比 Claude 慢，等几秒再看。
+
 **没有声音**
 Xpra 支持音频转发，但需要客户端支持；HTML5 客户端在没有用户交互前会被浏览器阻止自动播放，点一下页面即可。
 
@@ -183,7 +213,7 @@ Xpra 默认双向同步剪贴板。浏览器出于安全限制可能需要你允
 ├── Makefile                # 常用命令封装
 ├── scripts/
 │   ├── entrypoint.sh       # 容器入口：准备环境 + 启动 Xpra
-│   ├── start-session.sh    # Xpra 子会话：openbox + claude-desktop
+│   ├── start-session.sh    # Xpra 子会话：clash-verge + claude-desktop
 │   └── open-browser.sh     # xdg-open 的浏览器入口
 ├── docs/
 │   └── clients.md          # 各平台客户端连接说明
