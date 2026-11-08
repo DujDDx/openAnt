@@ -1,0 +1,40 @@
+name: claude-desktop-xpra
+
+services:
+  claude-desktop:
+    build:
+      context: .
+      args:
+        CLAUDE_DESKTOP_VERSION: ${CLAUDE_DESKTOP_VERSION:-}
+        INSTALL_CJK_FONTS: ${INSTALL_CJK_FONTS:-true}
+        INSTALL_BROWSER: ${INSTALL_BROWSER:-true}
+    image: claude-desktop-xpra:latest
+    container_name: claude-desktop
+    restart: unless-stopped
+    ports:
+      # XPRA_BIND=0.0.0.0 允许任何电脑访问；只想本机访问就改成 127.0.0.1
+      - "${XPRA_BIND:-0.0.0.0}:${XPRA_PORT:-14500}:14500"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      XPRA_PORT: "14500"
+      XPRA_PASSWORD: ${XPRA_PASSWORD:-}
+      CLAUDE_ARGS: ${CLAUDE_ARGS:-}
+      CLAUDE_GPU: ${CLAUDE_GPU:-0}
+    volumes:
+      # 保存登录态、MCP 配置（~/.config/Claude）以及缓存
+      - claude-data:/home/claude
+    # Chromium 的 zygote 需要在容器里创建命名空间，Docker 默认 seccomp 策略
+    # 会拦掉它（表现为 "Zygote process exited prematurely"）。
+    security_opt:
+      - seccomp=unconfined
+    # Chromium 需要足够的共享内存，否则会频繁崩溃
+    shm_size: "1gb"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:14500/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  claude-data:
