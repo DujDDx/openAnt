@@ -115,7 +115,7 @@ Claude Desktop 使用 OAuth 登录：点击「登录」后，它会在容器内�
 | 变量 | 说明 |
 | --- | --- |
 | `XPRA_SSL_CERT` / `XPRA_SSL_KEY` | 同时提供时启用 TLS，浏览器改用 `https://` |
-| `XPRA_TCP_AUTH` | 默认 `password`，可设 `none`（不推荐） |
+| `XPRA_TCP_AUTH` | `file:filename=<密码文件>` | 认证方式；`none` 等于不设防（不推荐） |
 | `XPRA_EXTRA_ARGS` | 追加任意 `xpra start` 参数 |
 
 ## 数据持久化
@@ -145,6 +145,9 @@ docker run --rm -v claude-desktop-xpra_claude-data:/data -v "$PWD":/backup alpin
    命名空间，Docker 默认的 seccomp 策略会把它拦下来。这会削弱容器的系统调用
    过滤，属于「能在容器里跑 Electron」的常见取舍；如果你更在意隔离，可以去掉
    这一行并改用 `CLAUDE_ARGS=--no-sandbox`（关掉 Chromium 自己的沙箱）。
+6. 容器内同时关闭了 WebKitGTK 自己的沙箱（`WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1`），
+   否则 Epiphany 和 Clash Verge 的界面在容器里启动即崩。理由是容器已经是隔离边界，
+   但这个变量确实是降低了一层纵深防御。
 
 一个最小的 Caddy 配置：
 
@@ -172,6 +175,12 @@ services:
 ```
 
 ## 常见问题
+
+**点「登录」后没有浏览器窗口弹出**
+
+镜像里已经装了 Epiphany 并在会话内打开了 WebKit 沙箱开关
+（`WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1`），因为容器的 bwrap 沙箱建不起来，
+不开就会直接崩。如果仍然没有窗口，看 `~/.cache/claude-xpra/` 下的日志。
 
 **页面能打开，登录后一直白屏**
 容器内 Chromium 共享内存不足。确认 `shm_size: "1gb"` 生效，或给 `CLAUDE_ARGS` 加上 `--disable-dev-shm-usage`。

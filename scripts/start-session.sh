@@ -16,6 +16,15 @@ export XDG_CURRENT_DESKTOP=openbox
 export DESKTOP_SESSION=openbox
 export ELECTRON_OZONE_PLATFORM_HINT=x11
 
+# WebKitGTK（Epiphany、Clash Verge 的界面层）在容器里建不起 bwrap 沙箱，
+# 会直接崩：bwrap: Can't mount proc on /newroot/proc: Operation not permitted。
+# 容器本身已经是隔离边界，这里关掉 WebKit 自带的沙箱，否则 OAuth 登录用的
+# 浏览器根本起不来。
+export WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
+# 容器里没有 accessibility bus，关掉可以少两行噪音日志
+export GTK_A11Y=none
+export NO_AT_BRIDGE=1
+
 # 容器里通常没有可用 GPU，软件渲染更稳定；有显卡时可设 CLAUDE_GPU=1 覆盖。
 if [[ "${CLAUDE_GPU:-0}" != "1" ]]; then
     export LIBGL_ALWAYS_SOFTWARE=1

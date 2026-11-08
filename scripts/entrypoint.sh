@@ -48,11 +48,16 @@ log "登录用户名     : 任意（例如 claude）"
 log "登录密码       : ${XPRA_PASSWORD}"
 
 # --------------------------------------------------------------- Xpra 参数 ---
+# 注意：`--tcp-auth=password` 并不会去读 --password-file，它要求用
+# password:value=<明文> 直接把密码写在参数里（会出现在 ps 中）。
+# 这里改用 file 认证模块，它才是「密码文件里只放一个密码」的语义。
+xpra_auth="${XPRA_TCP_AUTH:-file:filename=${PASSWORD_FILE}}"
+
 xpra_args=(
     "start" "${XPRA_DISPLAY}"
     "--bind-tcp=0.0.0.0:${XPRA_PORT}"
     "--html=${XPRA_HTML:-on}"
-    "--tcp-auth=${XPRA_TCP_AUTH:-password}"
+    "--tcp-auth=${xpra_auth}"
     "--password-file=${PASSWORD_FILE}"
     "--socket-dir=${XPRA_SOCKET_DIR}"
     "--start-child=/usr/local/bin/start-session.sh"
