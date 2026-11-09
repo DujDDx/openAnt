@@ -86,7 +86,11 @@ core_supervise=0
 if [[ -n "${clash_pid}" ]]; then
     clash_wait=1
 elif command -v verge-mihomo >/dev/null 2>&1; then
-    if [[ ! -f "${clash_runtime_config}" ]]; then
+    if pgrep -x clash-verge >/dev/null 2>&1; then
+        # GUI 在跑，内核归它管；我们再起一个只会两个进程抢同一个端口
+        log "Clash GUI 正在运行，内核交给它管理"
+        clash_wait=1
+    elif [[ ! -f "${clash_runtime_config}" ]]; then
         log "还没有 Clash 配置（${clash_runtime_config}），跳过托管内核"
     elif port_open; then
         log "已有 Clash 内核在监听 ${clash_port}，直接使用"

@@ -37,8 +37,8 @@ password:
 
 clash:
 	$(COMPOSE) exec -d claude-desktop /usr/local/bin/clash-gui.sh
-	@echo "Clash Verge 已在会话里打开，回到浏览器窗口查看"
-	@echo "改完订阅后执行 make restart 让代理生效"
+	@sleep 12
+	@$(COMPOSE) exec -T claude-desktop bash -lc 'if pgrep -x verge-mihomo >/dev/null; then echo "Clash 窗口已打开，内核已在运行"; else echo "Clash 窗口已打开；如果它提示「需要更新系统服务」，在窗口里点「继续使用 SIDECAR」即可"; fi'
 
 clean:
 	$(COMPOSE) down -v

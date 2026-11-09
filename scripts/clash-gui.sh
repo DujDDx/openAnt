@@ -26,4 +26,4 @@ if pgrep -f verge-mihomo >/dev/null 2>&1; then
     sleep 1
 fi
 
-exec clash-verge "$@"
+exec clash-verge "$@" >>"${log_dir}/clash-verge.log" 2>&1
