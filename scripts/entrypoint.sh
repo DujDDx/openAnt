@@ -25,6 +25,12 @@ mkdir -p \
     "${XPRA_SOCKET_DIR}"
 chmod 0700 "${XDG_RUNTIME_DIR}" "${XPRA_SOCKET_DIR}"
 
+# docker compose restart 会保留容器的 /tmp，上一次运行留下的 X lock 会让
+# Xvfb 报 "Server is already active for display 100" 然后无限重启。
+# 容器里不可能有别的 X 服务在跑，直接清掉。
+display_num="${XPRA_DISPLAY#:}"
+rm -f "/tmp/.X${display_num}-lock" "/tmp/.X11-unix/X${display_num}" 2>/dev/null || true
+
 # ---------------------------------------------------------------- 访问密码 ---
 # 优先级：XPRA_PASSWORD 环境变量 > 持久化的密码文件 > 随机生成并持久化。
 PASSWORD_FILE="${XDG_CONFIG_HOME}/claude-xpra/password"

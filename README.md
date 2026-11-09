@@ -78,16 +78,17 @@ Claude Desktop 使用 OAuth 登录：点击「登录」后，它会在容器内�
 1. 打开 `http://<宿主机IP>:14500/`，会同时看到 Claude Desktop 和 Clash Verge 两个窗口。
 2. 在 Clash Verge 里打开「订阅」→ 新建，粘贴订阅链接并导入。
 3. 在「代理」里选一个节点，确认「设置」里的**混合端口**（默认 `7897`）。
-4. 配好订阅后重启容器（`docker compose restart`）。Claude Desktop 启动时会探测混合端口，端口在监听就自动带上 `http_proxy` / `https_proxy`。
+4. 配好订阅后重启容器（`docker compose restart`），内核会加载新的配置，Claude Desktop 也会自动带上 `http_proxy` / `https_proxy`。
 
 几点说明：
 
-- 每次容器启动，Clash Verge 都会弹一次「需要更新系统服务」。容器里没有 systemd，这是预期现象：点「继续使用 SIDECAR」即可。镜像已经装好它回退所需的 `gsettings` / `dconf`，不点这一下内核不会启动。
+- 容器里没有 systemd，Clash Verge 会提示「需要更新系统服务」。**这个提示可以忽略，不需要点「继续使用 SIDECAR」**：会话脚本会用它自己的参数把内核 `verge-mihomo` 直接拉起来，代理照常工作。
+- 内核由脚本托底启动，所以改完订阅要重启一次容器才会生效（`docker compose restart`）。
 - 容器里没有 `NET_ADMIN` 权限，**TUN 模式用不了**；也不需要打开「系统代理」。本镜像通过 `http_proxy` 环境变量直连混合端口，这是容器里最可靠的方式。
 - 端口改过之后，把 `.env` 里的 `PROXY_URL` 或 `CLASH_MIXED_PORT` 同步改掉，再 `docker compose up -d`。
 - Clash Verge 的订阅与配置存在 `claude-data` 卷里，容器重建不会丢。
 - 不想让 Claude 走代理：`ENABLE_PROXY=0`；不想启动 Clash 窗口：`ENABLE_CLASH_VERGE=0`。
-- 首次还没导入订阅时混合端口是关的，`ENABLE_PROXY=auto` 会让 Claude 直连——容器本身通常就能出网，所以不影响登录。要强制指定走不走代理，把它设成 `1` 或 `0`。
+- `ENABLE_PROXY=auto`（默认）只在「混合端口在监听」且「已经启用订阅」时才让 Claude 走代理；没有订阅时直连，容器本身通常就能出网，不影响登录。
 
 ## 配置项
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Xpra 的子会话：窗口管理器 + （可选）Clash Verge + Claude Desktop。
+# Xpra 的子会话：Clash Verge（可选）+ 代理环境变量 + Claude Desktop。
 #
 # Xpra 用 --exit-with-children=yes 启动本脚本，因此 Claude Desktop 退出时
 # 整个 Xpra 会话随之结束，容器按 restart 策略重启，状态保存在挂载卷里。
@@ -30,16 +30,41 @@ if [[ "${CLAUDE_GPU:-0}" != "1" ]]; then
     export LIBGL_ALWAYS_SOFTWARE=1
 fi
 
-# ------------------------------------------------------------ 窗口管理器 ---
 log_dir="${XDG_CACHE_HOME:-${HOME}/.cache}/claude-xpra"
 mkdir -p "${log_dir}"
 
 # 说明：Xpra 的 seamless 模式自带窗口管理器，不需要再起 openbox
 # （起了也会报 "A window manager is already running" 然后退出）。
 
+# ---------------------------------------------------------------- 代理位置 ---
+clash_data_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/io.github.clash-verge-rev.clash-verge-rev"
+clash_runtime_config="${clash_data_dir}/clash-verge.yaml"
+clash_socket="${clash_data_dir}/verge-mihomo.sock"
+clash_verge_yaml="${clash_data_dir}/verge.yaml"
+clash_profiles_yaml="${clash_data_dir}/profiles.yaml"
+
+# 已经导入并启用了订阅？profiles.yaml 里 current 为 null 表示还没有。
+clash_profile_active=0
+if [[ -r "${clash_profiles_yaml}" ]] \
+   && ! grep -qE '^current:[[:space:]]*(null)?[[:space:]]*$' "${clash_profiles_yaml}"; then
+    clash_profile_active=1
+fi
+
+clash_port="${CLASH_MIXED_PORT:-}"
+if [[ -z "${clash_port}" && -r "${clash_verge_yaml}" ]]; then
+    clash_port="$(sed -n 's/^verge_mixed_port:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "${clash_verge_yaml}" | head -n 1 || true)"
+fi
+clash_port="${clash_port:-7897}"
+
+port_open() {
+    (exec 3<>"/dev/tcp/127.0.0.1/${clash_port}") 2>/dev/null || return 1
+    exec 3<&- 3>&-
+    return 0
+}
+
 # ------------------------------------------------------------ Clash Verge ---
-# Clash Verge 自己就是出口，必须先于代理环境变量启动；否则它更新订阅的流量
-# 会被绕回它自己，形成死循环。
+# GUI 自己就是出口，必须先于代理环境变量启动；否则它更新订阅的流量会被绕回
+# 自己，形成死循环。
 clash_pid=""
 if [[ "${ENABLE_CLASH_VERGE:-1}" != "0" ]] && command -v clash-verge >/dev/null 2>&1; then
     log "启动 Clash Verge..."
@@ -47,23 +72,30 @@ if [[ "${ENABLE_CLASH_VERGE:-1}" != "0" ]] && command -v clash-verge >/dev/null 
     clash_pid=$!
 fi
 
-# ---------------------------------------------------------------- 代理配置 ---
-# 混合端口优先取 Clash Verge 自己保存的配置，其次 CLASH_MIXED_PORT，最后默认值。
-clash_data_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/io.github.clash-verge-rev.clash-verge-rev"
-clash_verge_yaml="${clash_data_dir}/verge.yaml"
-clash_port="${CLASH_MIXED_PORT:-}"
-
-if [[ -z "${clash_port}" && -r "${clash_verge_yaml}" ]]; then
-    clash_port="$(sed -n 's/^verge_mixed_port:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "${clash_verge_yaml}" | head -n 1 || true)"
+# GUI 在没有系统服务的容器里，会要求用户手动确认「继续使用 SIDECAR」才拉起内核，
+# 而且这个确认是会话级的，每次启动都要点一次。这里直接用它自己的参数把内核拉起来，
+# 用户就不需要那一步：GUI 仍然可以打开来改订阅和选节点。
+if [[ -n "${clash_pid}" ]]; then
+    for _ in 1 2 3 4 5; do
+        port_open && break
+        sleep 1
+    done
+    if ! port_open && command -v verge-mihomo >/dev/null 2>&1 && [[ -f "${clash_runtime_config}" ]]; then
+        log "自行启动 Clash 内核：${clash_runtime_config}"
+        verge-mihomo \
+            -d "${clash_data_dir}" \
+            -f "${clash_runtime_config}" \
+            -ext-ctl-unix "${clash_socket}" \
+            >"${log_dir}/mihomo.log" 2>&1 &
+    fi
 fi
-clash_port="${clash_port:-7897}"
 
+# ---------------------------------------------------------------- 代理配置 ---
 proxy_url="${PROXY_URL:-http://127.0.0.1:${clash_port}}"
 
 # ENABLE_PROXY: auto（默认）| 1 | 0
 #   auto 只有在混合端口真的在监听时才让 Claude 走代理。容器本身通常就能直连，
-#   给 Claude 指一个没人监听的端口只会让它的所有请求失败——这正是「登不上去」
-#   的一个常见原因（Clash 还没导入订阅，7897 是关的）。
+#   给 Claude 指一个没人监听的端口只会让它的所有请求失败。
 proxy_mode="${ENABLE_PROXY:-auto}"
 case "${proxy_mode}" in
     0|no|false) proxy_mode=0 ;;
@@ -74,8 +106,7 @@ esac
 clash_listening=0
 if [[ -n "${clash_pid}" ]]; then
     for _ in $(seq 1 15); do
-        if (exec 3<>"/dev/tcp/127.0.0.1/${clash_port}") 2>/dev/null; then
-            exec 3<&- 3>&-
+        if port_open; then
             clash_listening=1
             break
         fi
@@ -84,7 +115,9 @@ if [[ -n "${clash_pid}" ]]; then
 fi
 
 if [[ "${proxy_mode}" = "auto" ]]; then
-    if [[ "${clash_listening}" = "1" ]]; then
+    # 端口在听、并且确实启用了订阅，才值得让 Claude 绕这一跳；
+    # 否则直连更快，也少一个失败点。
+    if [[ "${clash_listening}" = "1" && "${clash_profile_active}" = "1" ]]; then
         proxy_mode=1
     else
         proxy_mode=0
@@ -99,7 +132,9 @@ if [[ "${proxy_mode}" = "1" ]]; then
            NO_PROXY="localhost,127.0.0.1,::1"
     log "已为 Claude Desktop 设置代理: ${proxy_url}"
 elif [[ -n "${clash_pid}" && "${clash_listening}" = "0" ]]; then
-    log "Clash 混合端口 ${clash_port} 未监听（可能还没导入订阅），Claude 将直连"
+    log "Clash 混合端口 ${clash_port} 未监听，Claude 将直连"
+elif [[ -n "${clash_pid}" && "${clash_profile_active}" = "0" ]]; then
+    log "Clash 还没有启用订阅，Claude 将直连（导入订阅后重启容器即可生效）"
 fi
 
 # ------------------------------------------------------------ Claude Desktop ---
