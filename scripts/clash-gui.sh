@@ -14,6 +14,12 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-claude}"
 export WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
 export GTK_A11Y=none
 
+log_dir="${XDG_CACHE_HOME:-${HOME}/.cache}/claude-xpra"
+mkdir -p "${log_dir}"
+# 先留标记再停内核：托管内核的看护进程看到它就会退出，不会在 GUI 启动的
+# 空档里把内核抢回去，造成「已有内核进程正在运行」那个死锁。
+touch "${log_dir}/gui-takeover"
+
 if pgrep -f verge-mihomo >/dev/null 2>&1; then
     echo "[clash-gui] 停止容器托管的内核，交给 GUI 管理"
     pkill -f verge-mihomo || true

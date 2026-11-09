@@ -42,6 +42,9 @@ clash_runtime_config="${clash_data_dir}/clash-verge.yaml"
 clash_socket="${clash_data_dir}/verge-mihomo.sock"
 clash_verge_yaml="${clash_data_dir}/verge.yaml"
 clash_profiles_yaml="${clash_data_dir}/profiles.yaml"
+# GUI 接管时留下的标记，托管内核的看护进程看到它就不再抢内核
+clash_gui_sentinel="${log_dir}/gui-takeover"
+rm -f "${clash_gui_sentinel}"
 
 # 已经导入并启用了订阅？profiles.yaml 里 current 为 null 表示还没有。
 clash_profile_active=0
@@ -79,6 +82,7 @@ fi
 # ---------------------------------------------------------------- 托管内核 ---
 # GUI 没开的时候，由容器自己把 mihomo 拉起来：不开窗口、不用点任何确认。
 clash_wait=0
+core_supervise=0
 if [[ -n "${clash_pid}" ]]; then
     clash_wait=1
 elif command -v verge-mihomo >/dev/null 2>&1; then
@@ -88,6 +92,8 @@ elif command -v verge-mihomo >/dev/null 2>&1; then
         log "已有 Clash 内核在监听 ${clash_port}，直接使用"
         clash_wait=1
     else
+        # 上一次内核被强杀时可能留下 socket 文件，导致新内核绑不上接口
+        rm -f "${clash_socket}"
         log "启动托管内核：${clash_runtime_config}"
         verge-mihomo \
             -d "${clash_data_dir}" \
@@ -95,7 +101,30 @@ elif command -v verge-mihomo >/dev/null 2>&1; then
             -ext-ctl-unix "${clash_socket}" \
             >"${log_dir}/mihomo.log" 2>&1 &
         clash_wait=1
+        core_supervise=1
     fi
+fi
+
+# 看护托管内核：它中途退出会让代理静默失效，这里每 10 秒检查一次。
+# GUI 一旦接管（有 clash-verge 进程或留下标记），立刻退出，避免两个内核打架。
+if [[ "${core_supervise}" = "1" ]]; then
+    (
+        while sleep 10; do
+            if [[ -f "${clash_gui_sentinel}" ]] || pgrep -x clash-verge >/dev/null 2>&1; then
+                echo "[session] Clash GUI 已接管，停止看护托管内核" >&2
+                exit 0
+            fi
+            if ! pgrep -f verge-mihomo >/dev/null 2>&1; then
+                echo "[session] 托管内核已退出，重新拉起" >&2
+                rm -f "${clash_socket}"
+                verge-mihomo \
+                    -d "${clash_data_dir}" \
+                    -f "${clash_runtime_config}" \
+                    -ext-ctl-unix "${clash_socket}" \
+                    >>"${log_dir}/mihomo.log" 2>&1 &
+            fi
+        done
+    ) &
 fi
 
 # ---------------------------------------------------------------- 代理配置 ---
@@ -111,9 +140,11 @@ case "${proxy_mode}" in
     *)          proxy_mode=auto ;;
 esac
 
+direct_ok=0
 clash_listening=0
 if [[ "${clash_wait}" = "1" ]]; then
-    for _ in $(seq 1 15); do
+    # 端口一开就继续，所以这个上限只影响内核起不来的情况
+    for _ in $(seq 1 30); do
         if port_open; then
             clash_listening=1
             break
@@ -123,10 +154,16 @@ if [[ "${clash_wait}" = "1" ]]; then
 fi
 
 if [[ "${proxy_mode}" = "auto" ]]; then
-    # 端口在听、并且确实启用了订阅，才值得让 Claude 绕这一跳；
-    # 否则直连更快，也少一个失败点。
+    # 三层判断：端口要在听、订阅要启用、而且直连不通才绕代理。
+    # 很多环境（包括宿主机开着 TUN 代理）里容器本身就能出网，再套一层
+    # 容器内 Clash 只会多一跳、多一组可能挂掉的节点，反而不稳定。
     if [[ "${clash_listening}" = "1" && "${clash_profile_active}" = "1" ]]; then
-        proxy_mode=1
+        if curl -sS -m 8 -o /dev/null "https://api.anthropic.com" >/dev/null 2>&1; then
+            direct_ok=1
+            proxy_mode=0
+        else
+            proxy_mode=1
+        fi
     else
         proxy_mode=0
     fi
@@ -139,6 +176,8 @@ if [[ "${proxy_mode}" = "1" ]]; then
            no_proxy="localhost,127.0.0.1,::1" \
            NO_PROXY="localhost,127.0.0.1,::1"
     log "已为 Claude Desktop 设置代理: ${proxy_url}"
+elif [[ "${direct_ok}" = "1" ]]; then
+    log "直连可达（容器或宿主机代理已在生效），Claude 直连，不再套容器内 Clash"
 elif [[ "${clash_wait}" = "1" && "${clash_listening}" = "0" ]]; then
     log "Clash 混合端口 ${clash_port} 未监听，Claude 将直连"
 elif [[ "${clash_listening}" = "1" && "${clash_profile_active}" = "0" ]]; then
