@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Clash Verge (配置)
+Name[zh_CN]=Clash Verge (配置)
+Comment=打开 Clash Verge 图形界面来导入订阅、选择节点；会先停掉容器托管的内核
+Exec=/usr/local/bin/clash-gui.sh
+Icon=clash-verge
+Terminal=false
+Categories=Network;
+StartupNotify=false

@@ -73,21 +73,26 @@ Claude Desktop 使用 OAuth 登录：点击「登录」后，它会在容器内�
 
 ## 在容器里配置 Clash Verge 代理
 
-镜像内置了 [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev)，它的窗口和 Claude Desktop 一起经 Xpra 转发，所以整个代理配置过程都能在浏览器里完成。
+镜像内置了 [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev)。默认情况下容器**不弹窗口**，而是自己托管一个无界面的 mihomo 内核，代理开箱可用；需要改订阅时再从 Xpra 菜单把图形界面打开。
 
-1. 打开 `http://<宿主机IP>:14500/`，会同时看到 Claude Desktop 和 Clash Verge 两个窗口。
-2. 在 Clash Verge 里打开「订阅」→ 新建，粘贴订阅链接并导入。
-3. 在「代理」里选一个节点，确认「设置」里的**混合端口**（默认 `7897`）。
-4. 配好订阅后重启容器（`docker compose restart`），内核会加载新的配置，Claude Desktop 也会自动带上 `http_proxy` / `https_proxy`。
+**第一次配置订阅：**
+
+1. 打开 `http://<宿主机IP>:14500/`，点左上角的 ☰ 打开 Xpra 的应用菜单。
+2. 选「Clash Verge (配置)」——它会先停掉容器托管的内核，再打开 Clash Verge 窗口。
+3. 在窗口里点「继续使用 SIDECAR」。因为托管内核已经停了，这次会成功，弹窗直接消失。
+4. 导入订阅、选节点，确认「设置」里的**混合端口**（默认 `7897`）。
+5. `docker compose restart`：容器重新托管内核并加载新配置，Claude Desktop 自动带上 `http_proxy` / `https_proxy`。
+
+之后要改订阅，重复第 1、2、5 步即可；日常启动完全不用点任何东西。
 
 几点说明：
 
-- 容器里没有 systemd，Clash Verge 会提示「需要更新系统服务」。**这个提示可以忽略，不需要点「继续使用 SIDECAR」**：会话脚本会用它自己的参数把内核 `verge-mihomo` 直接拉起来，代理照常工作。
-- 内核由脚本托底启动，所以改完订阅要重启一次容器才会生效（`docker compose restart`）。
+- 容器里没有 systemd，Clash Verge 只能用 Sidecar，所以它每次启动都会问一次「需要更新系统服务」。第 2 步先停掉托管内核，就是为了让这次「继续使用 SIDECAR」能点成功——否则它会报「已有内核进程正在运行」，弹窗既关不掉也用不了。
 - 容器里没有 `NET_ADMIN` 权限，**TUN 模式用不了**；也不需要打开「系统代理」。本镜像通过 `http_proxy` 环境变量直连混合端口，这是容器里最可靠的方式。
+- 想让 GUI 开机自启：`ENABLE_CLASH_VERGE=1`。这种模式下容器不再托管内核，代理需要你每次启动后在窗口里点一次「继续使用 SIDECAR」。
 - 端口改过之后，把 `.env` 里的 `PROXY_URL` 或 `CLASH_MIXED_PORT` 同步改掉，再 `docker compose up -d`。
 - Clash Verge 的订阅与配置存在 `claude-data` 卷里，容器重建不会丢。
-- 不想让 Claude 走代理：`ENABLE_PROXY=0`；不想启动 Clash 窗口：`ENABLE_CLASH_VERGE=0`。
+- 不想让 Claude 走代理：`ENABLE_PROXY=0`。
 - `ENABLE_PROXY=auto`（默认）只在「混合端口在监听」且「已经启用订阅」时才让 Claude 走代理；没有订阅时直连，容器本身通常就能出网，不影响登录。
 
 ## 配置项
@@ -107,7 +112,7 @@ Claude Desktop 使用 OAuth 登录：点击「登录」后，它会在容器内�
 | `INSTALL_BROWSER` | `true` | 是否安装容器内浏览器（登录需要） |
 | `INSTALL_CLASH_VERGE` | `true` | 是否安装 Clash Verge Rev |
 | `CLASH_VERGE_VERSION` | `2.5.10` | Clash Verge Rev 版本 |
-| `ENABLE_CLASH_VERGE` | `1` | 启动时是否拉起 Clash Verge 窗口 |
+| `ENABLE_CLASH_VERGE` | `0` | 是否开机自启 Clash Verge 窗口；默认由容器托管无界面内核 |
 | `ENABLE_PROXY` | `auto` | `auto` 仅在混合端口监听时走代理；`1` 强制走；`0` 强制直连 |
 | `PROXY_URL` | 自动 | 代理地址；留空则读取混合端口，兜底 `http://127.0.0.1:7897` |
 | `CLASH_MIXED_PORT` | 自动 | 强制指定 Clash 混合端口 |

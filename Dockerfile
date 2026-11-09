@@ -285,9 +285,10 @@ RUN set -eux; \
     rm -rf /tmp/dist
 
 COPY scripts/ /usr/local/bin/
-RUN chmod 0755 /usr/local/bin/entrypoint.sh \
-              /usr/local/bin/start-session.sh \
-              /usr/local/bin/open-browser.sh
+RUN chmod 0755 /usr/local/bin/*.sh \
+    && install -m 0644 /usr/local/bin/clash-verge-config.desktop \
+        /usr/share/applications/clash-verge-config.desktop \
+    && rm -f /usr/local/bin/clash-verge-config.desktop
 
 ENV HOME=/home/claude \
     BROWSER=/usr/local/bin/open-browser.sh

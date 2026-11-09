@@ -63,30 +63,38 @@ port_open() {
 }
 
 # ------------------------------------------------------------ Clash Verge ---
-# GUI 自己就是出口，必须先于代理环境变量启动；否则它更新订阅的流量会被绕回
-# 自己，形成死循环。
+# 默认不启动 GUI：容器自己托管一个无界面内核，代理开箱可用，也不用处理
+# 「需要更新系统服务」那个弹窗。需要改订阅时，从 Xpra 菜单打开「Clash Verge (配置)」，
+# 那个入口会先停掉托管内核，再让 GUI 用 Sidecar 接管。
+#
+# ENABLE_CLASH_VERGE=1 可以让 GUI 开机自启，此时不再托管内核（否则 GUI 会被
+# 弹窗卡住），代理需要你点一次「继续使用 SIDECAR」才会就绪。
 clash_pid=""
-if [[ "${ENABLE_CLASH_VERGE:-1}" != "0" ]] && command -v clash-verge >/dev/null 2>&1; then
-    log "启动 Clash Verge..."
+if [[ "${ENABLE_CLASH_VERGE:-0}" != "0" ]] && command -v clash-verge >/dev/null 2>&1; then
+    log "启动 Clash Verge（GUI 模式，不托管内核）..."
     clash-verge >"${log_dir}/clash-verge.log" 2>&1 &
     clash_pid=$!
 fi
 
-# GUI 在没有系统服务的容器里，会要求用户手动确认「继续使用 SIDECAR」才拉起内核，
-# 而且这个确认是会话级的，每次启动都要点一次。这里直接用它自己的参数把内核拉起来，
-# 用户就不需要那一步：GUI 仍然可以打开来改订阅和选节点。
+# ---------------------------------------------------------------- 托管内核 ---
+# GUI 没开的时候，由容器自己把 mihomo 拉起来：不开窗口、不用点任何确认。
+clash_wait=0
 if [[ -n "${clash_pid}" ]]; then
-    for _ in 1 2 3 4 5; do
-        port_open && break
-        sleep 1
-    done
-    if ! port_open && command -v verge-mihomo >/dev/null 2>&1 && [[ -f "${clash_runtime_config}" ]]; then
-        log "自行启动 Clash 内核：${clash_runtime_config}"
+    clash_wait=1
+elif command -v verge-mihomo >/dev/null 2>&1; then
+    if [[ ! -f "${clash_runtime_config}" ]]; then
+        log "还没有 Clash 配置（${clash_runtime_config}），跳过托管内核"
+    elif port_open; then
+        log "已有 Clash 内核在监听 ${clash_port}，直接使用"
+        clash_wait=1
+    else
+        log "启动托管内核：${clash_runtime_config}"
         verge-mihomo \
             -d "${clash_data_dir}" \
             -f "${clash_runtime_config}" \
             -ext-ctl-unix "${clash_socket}" \
             >"${log_dir}/mihomo.log" 2>&1 &
+        clash_wait=1
     fi
 fi
 
@@ -104,7 +112,7 @@ case "${proxy_mode}" in
 esac
 
 clash_listening=0
-if [[ -n "${clash_pid}" ]]; then
+if [[ "${clash_wait}" = "1" ]]; then
     for _ in $(seq 1 15); do
         if port_open; then
             clash_listening=1
@@ -131,9 +139,9 @@ if [[ "${proxy_mode}" = "1" ]]; then
            no_proxy="localhost,127.0.0.1,::1" \
            NO_PROXY="localhost,127.0.0.1,::1"
     log "已为 Claude Desktop 设置代理: ${proxy_url}"
-elif [[ -n "${clash_pid}" && "${clash_listening}" = "0" ]]; then
+elif [[ "${clash_wait}" = "1" && "${clash_listening}" = "0" ]]; then
     log "Clash 混合端口 ${clash_port} 未监听，Claude 将直连"
-elif [[ -n "${clash_pid}" && "${clash_profile_active}" = "0" ]]; then
+elif [[ "${clash_listening}" = "1" && "${clash_profile_active}" = "0" ]]; then
     log "Clash 还没有启用订阅，Claude 将直连（导入订阅后重启容器即可生效）"
 fi
 
