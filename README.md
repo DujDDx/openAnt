@@ -77,13 +77,12 @@ Claude Desktop 使用 OAuth 登录：点击「登录」后，它会在容器内�
 
 **第一次配置订阅：**
 
-1. 打开 `http://<宿主机IP>:14500/`，点左上角的 ☰ 打开 Xpra 的应用菜单。
-2. 选「Clash Verge (配置)」——它会先停掉容器托管的内核，再打开 Clash Verge 窗口。
-3. 在窗口里点「继续使用 SIDECAR」。因为托管内核已经停了，这次会成功，弹窗直接消失。
-4. 导入订阅、选节点，确认「设置」里的**混合端口**（默认 `7897`）。
-5. `docker compose restart`：容器重新托管内核并加载新配置，Claude Desktop 自动带上 `http_proxy` / `https_proxy`。
+1. 在项目目录执行 `make clash`（或从 Xpra 菜单的「Clash Verge (配置)」打开）。它会先停掉容器托管的内核，再把 Clash Verge 窗口放进会话。
+2. 如果弹出「需要更新系统服务」，点「继续使用 SIDECAR」——托管内核已经停掉，这次会成功。
+3. 导入订阅、选节点，确认「设置」里的**混合端口**（默认 `7897`）。
+4. `docker compose restart`：容器重新托管内核并加载新配置，Claude Desktop 自动带上 `http_proxy` / `https_proxy`。
 
-之后要改订阅，重复第 1、2、5 步即可；日常启动完全不用点任何东西。
+之后要改订阅，重复第 1、4 步即可；日常启动完全不用点任何东西。
 
 几点说明：
 
