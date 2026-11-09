@@ -60,32 +60,46 @@ clash_port="${clash_port:-7897}"
 
 proxy_url="${PROXY_URL:-http://127.0.0.1:${clash_port}}"
 
-if [[ "${ENABLE_PROXY:-1}" != "0" ]]; then
-    # 等混合端口就绪，避免 Claude Desktop 在代理起来之前就去连网。
-    if [[ -n "${clash_pid}" ]]; then
-        clash_ready=0
-        for _ in $(seq 1 15); do
-            if (exec 3<>"/dev/tcp/127.0.0.1/${clash_port}") 2>/dev/null; then
-                exec 3<&- 3>&-
-                clash_ready=1
-                break
-            fi
-            sleep 1
-        done
-        if [[ "${clash_ready}" = "1" ]]; then
-            log "Clash 混合端口 127.0.0.1:${clash_port} 已就绪"
-        else
-            log "警告: Clash 混合端口 127.0.0.1:${clash_port} 还没有监听"
-            log "      请先在 Clash Verge 窗口里导入订阅并启用配置"
-        fi
-    fi
+# ENABLE_PROXY: auto（默认）| 1 | 0
+#   auto 只有在混合端口真的在监听时才让 Claude 走代理。容器本身通常就能直连，
+#   给 Claude 指一个没人监听的端口只会让它的所有请求失败——这正是「登不上去」
+#   的一个常见原因（Clash 还没导入订阅，7897 是关的）。
+proxy_mode="${ENABLE_PROXY:-auto}"
+case "${proxy_mode}" in
+    0|no|false) proxy_mode=0 ;;
+    1|yes|true) proxy_mode=1 ;;
+    *)          proxy_mode=auto ;;
+esac
 
+clash_listening=0
+if [[ -n "${clash_pid}" ]]; then
+    for _ in $(seq 1 15); do
+        if (exec 3<>"/dev/tcp/127.0.0.1/${clash_port}") 2>/dev/null; then
+            exec 3<&- 3>&-
+            clash_listening=1
+            break
+        fi
+        sleep 1
+    done
+fi
+
+if [[ "${proxy_mode}" = "auto" ]]; then
+    if [[ "${clash_listening}" = "1" ]]; then
+        proxy_mode=1
+    else
+        proxy_mode=0
+    fi
+fi
+
+if [[ "${proxy_mode}" = "1" ]]; then
     export http_proxy="${proxy_url}"   https_proxy="${proxy_url}" \
            HTTP_PROXY="${proxy_url}"   HTTPS_PROXY="${proxy_url}" \
            all_proxy="${proxy_url}"    ALL_PROXY="${proxy_url}" \
            no_proxy="localhost,127.0.0.1,::1" \
            NO_PROXY="localhost,127.0.0.1,::1"
     log "已为 Claude Desktop 设置代理: ${proxy_url}"
+elif [[ -n "${clash_pid}" && "${clash_listening}" = "0" ]]; then
+    log "Clash 混合端口 ${clash_port} 未监听（可能还没导入订阅），Claude 将直连"
 fi
 
 # ------------------------------------------------------------ Claude Desktop ---

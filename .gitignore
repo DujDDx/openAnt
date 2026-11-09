@@ -14,5 +14,8 @@ Thumbs.db
 
 # 日志与构建产物
 *.log
-dist/
 build/
+
+# 离线构建用的安装包（目录本身要保留）
+dist/*
+!dist/.gitkeep

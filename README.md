@@ -28,7 +28,7 @@
 ## 前置条件
 
 - Docker（含 `docker compose`）
-- 构建时能访问 `downloads.claude.ai`（Claude Desktop 官方源）、`xpra.org`（Xpra 官方源）和 `github.com`（Clash Verge 的发布包）
+- 构建时需要能访问外网。各依赖都有回退源：官方源不通时会自动改用 GitHub 加速前缀，Ubuntu 源可以用 `APT_MIRROR` 换成国内镜像
 
 ## 快速开始
 
@@ -78,15 +78,16 @@ Claude Desktop 使用 OAuth 登录：点击「登录」后，它会在容器内�
 1. 打开 `http://<宿主机IP>:14500/`，会同时看到 Claude Desktop 和 Clash Verge 两个窗口。
 2. 在 Clash Verge 里打开「订阅」→ 新建，粘贴订阅链接并导入。
 3. 在「代理」里选一个节点，确认「设置」里的**混合端口**（默认 `7897`）。
-4. Claude Desktop 启动时已经带上 `http_proxy` / `https_proxy` 指向这个端口，代理一就绪就能出网。
+4. 配好订阅后重启容器（`docker compose restart`）。Claude Desktop 启动时会探测混合端口，端口在监听就自动带上 `http_proxy` / `https_proxy`。
 
 几点说明：
 
+- 每次容器启动，Clash Verge 都会弹一次「需要更新系统服务」。容器里没有 systemd，这是预期现象：点「继续使用 SIDECAR」即可。镜像已经装好它回退所需的 `gsettings` / `dconf`，不点这一下内核不会启动。
 - 容器里没有 `NET_ADMIN` 权限，**TUN 模式用不了**；也不需要打开「系统代理」。本镜像通过 `http_proxy` 环境变量直连混合端口，这是容器里最可靠的方式。
 - 端口改过之后，把 `.env` 里的 `PROXY_URL` 或 `CLASH_MIXED_PORT` 同步改掉，再 `docker compose up -d`。
 - Clash Verge 的订阅与配置存在 `claude-data` 卷里，容器重建不会丢。
 - 不想让 Claude 走代理：`ENABLE_PROXY=0`；不想启动 Clash 窗口：`ENABLE_CLASH_VERGE=0`。
-- 首次还没导入订阅时，`ENABLE_PROXY=1` 会让 Claude 连不上网——先去 Clash 里把订阅配好即可。
+- 首次还没导入订阅时混合端口是关的，`ENABLE_PROXY=auto` 会让 Claude 直连——容器本身通常就能出网，所以不影响登录。要强制指定走不走代理，把它设成 `1` 或 `0`。
 
 ## 配置项
 
@@ -106,17 +107,47 @@ Claude Desktop 使用 OAuth 登录：点击「登录」后，它会在容器内�
 | `INSTALL_CLASH_VERGE` | `true` | 是否安装 Clash Verge Rev |
 | `CLASH_VERGE_VERSION` | `2.5.10` | Clash Verge Rev 版本 |
 | `ENABLE_CLASH_VERGE` | `1` | 启动时是否拉起 Clash Verge 窗口 |
-| `ENABLE_PROXY` | `1` | Claude Desktop 是否走容器内 Clash |
+| `ENABLE_PROXY` | `auto` | `auto` 仅在混合端口监听时走代理；`1` 强制走；`0` 强制直连 |
 | `PROXY_URL` | 自动 | 代理地址；留空则读取混合端口，兜底 `http://127.0.0.1:7897` |
 | `CLASH_MIXED_PORT` | 自动 | 强制指定 Clash 混合端口 |
+| `APT_MIRROR` | `http://mirrors.aliyun.com` | 官方源连续失败 3 次后自动切换的 Ubuntu 镜像站（用 http，基础镜像还没有 ca-certificates） |
+| `GITHUB_MIRRORS` | 三个加速前缀 | 构建期 GitHub 下载失败时的回退前缀，空格分隔 |
 
 其它可以在容器里直接传的环境变量：
 
 | 变量 | 说明 |
 | --- | --- |
 | `XPRA_SSL_CERT` / `XPRA_SSL_KEY` | 同时提供时启用 TLS，浏览器改用 `https://` |
-| `XPRA_TCP_AUTH` | `file:filename=<密码文件>` | 认证方式；`none` 等于不设防（不推荐） |
+| `XPRA_TCP_AUTH` | 认证方式，默认 `file:filename=<密码文件>`；`none` 等于不设防（不推荐） |
 | `XPRA_EXTRA_ARGS` | 追加任意 `xpra start` 参数 |
+
+## 构建时的网络回退
+
+镜像不假设构建机能直连任何单一站点：
+
+| 依赖 | 主源 | 回退 |
+| --- | --- | --- |
+| Ubuntu 软件包 | archive / ports.ubuntu.com | `APT_MIRROR` |
+| Claude Desktop | downloads.claude.ai | GitHub `aaddrick/claude-desktop-debian` 的同一份 app.asar |
+| Xpra | xpra.org | 仅重试（5 次） |
+| Clash Verge | github.com | `GITHUB_MIRRORS` 里依次尝试的加速前缀 |
+
+所有 `curl` 都带 `--retry`，apt 通过 `/etc/apt/apt.conf.d/80-network` 统一设成 5 次重试；GitHub 那一路还用断点续传，因为部分加速镜像会截断长连接。
+
+```bash
+# 官方源失败 3 次后会自动切到阿里云；也可以换成别的镜像站
+APT_MIRROR=http://mirrors.ustc.edu.cn docker compose build
+```
+
+### 完全离线构建
+
+把安装包放进 `dist/`，构建时会优先使用本地文件，完全跳过下载：
+
+```bash
+dist/claude-desktop.deb   # Claude Desktop 的 .deb（官方或社区重打包都行）
+dist/clash-verge.deb      # Clash Verge Rev 的 .deb
+docker compose build
+```
 
 ## 数据持久化
 

@@ -10,6 +10,8 @@ services:
         INSTALL_BROWSER: ${INSTALL_BROWSER:-true}
         INSTALL_CLASH_VERGE: ${INSTALL_CLASH_VERGE:-true}
         CLASH_VERGE_VERSION: ${CLASH_VERGE_VERSION:-2.5.10}
+        APT_MIRROR: ${APT_MIRROR:-http://mirrors.aliyun.com}
+        GITHUB_MIRRORS: ${GITHUB_MIRRORS:-https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/ https://gh.llkk.cc/}
     image: claude-desktop-xpra:latest
     container_name: claude-desktop
     restart: unless-stopped
@@ -24,7 +26,7 @@ services:
       CLAUDE_GPU: ${CLAUDE_GPU:-0}
       # 容器内 Clash Verge 与代理
       ENABLE_CLASH_VERGE: ${ENABLE_CLASH_VERGE:-1}
-      ENABLE_PROXY: ${ENABLE_PROXY:-1}
+      ENABLE_PROXY: ${ENABLE_PROXY:-auto}
       PROXY_URL: ${PROXY_URL:-}
       CLASH_MIXED_PORT: ${CLASH_MIXED_PORT:-}
     volumes:
