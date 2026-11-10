@@ -13,7 +13,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-http://mirrors.aliyun.com}
         GITHUB_MIRRORS: ${GITHUB_MIRRORS:-https://ghfast.top/ https://gh-proxy.com/ https://ghproxy.net/ https://gh.llkk.cc/}
     image: claude-desktop-xpra:latest
-    container_name: claude-desktop
+    # 不固定 container_name：这样可以用 -p 起多个实例（见 README「多实例」）
     restart: unless-stopped
     ports:
       # XPRA_BIND=0.0.0.0 允许任何电脑访问；只想本机访问就改成 127.0.0.1

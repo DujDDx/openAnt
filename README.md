@@ -27,6 +27,51 @@
 - **Clash Verge Rev**（可选）跑在同一个会话里，订阅、节点、规则都在浏览器里直接配，Claude Desktop 通过它的混合端口出网。
 - 断开连接后 Claude Desktop 仍在容器里运行，重新连上即可继续——这是 Xpra 相对 VNC 的核心优势。
 
+## 两种部署方式
+
+两种方式用的是同一个镜像，区别只在「跑在哪、怎么访问、要不要代理」。
+
+| | 本地部署 | 海外服务器 |
+| --- | --- | --- |
+| 隔离性 | 容器与本地环境完全隔离，宿主机不用装 Xpra、X11 或任何依赖 | 同样的隔离 |
+| 网络 | 走宿主机出口。宿主机开着 TUN 代理时，容器流量本来就被接管 | 直连 Claude，没有地区限制，最稳 |
+| 成本 | 用自己已有的机器，零额外成本 | 一台服务器可跑**多个实例**，摊薄到每个人很低 |
+| 访问方式 | 本机 `127.0.0.1` 或局域网 | 公网，必须配密码 + TLS/反向代理 |
+| 适合 | 个人自用、数据不想离开本机 | 多人共用、需要长期在线、本地网络不稳 |
+
+### 本地部署
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+默认就够用：`XPRA_BIND=0.0.0.0` 允许局域网访问，只想本机用就改成 `127.0.0.1`。
+宿主机已经有系统级代理时，保持 `ENABLE_PROXY=auto` 即可，容器会自己判断要不要套代理。
+
+### 海外服务器部署
+
+步骤相同，额外注意四点：
+
+1. **一定要设密码**：在 `.env` 里固定 `XPRA_PASSWORD`，别用自动生成后从日志里翻。
+2. **前面加一层 TLS**：用 Caddy / Nginx 反向代理到 `127.0.0.1:14500`，否则密码是明文传输。
+3. **收紧安全组**：只放行反代用的 443，别把 14500 直接暴露到公网。
+4. **通常不需要容器内 Clash**：海外直连即可，`ENABLE_PROXY=0`，把 Clash 窗口也关掉（`ENABLE_CLASH_VERGE=0`）能省内存。
+
+### 多实例（一台服务器跑多个）
+
+compose 没有固定 `container_name`，所以用 `-p` 指定不同项目名就能起多套，
+容器、数据卷、密码互相独立：
+
+```bash
+XPRA_PORT=14500 docker compose -p claude-a up -d
+XPRA_PORT=14501 docker compose -p claude-b up -d
+```
+
+- 每个实例对应一个卷：`claude-a_claude-data`、`claude-b_claude-data`
+- 每个实例用 `XPRA_PORT` 区分对外端口，前面用同一个反向代理按域名/路径分流即可
+- 管理单个实例：`docker compose -p claude-a logs -f` / `docker compose -p claude-a restart`
+
 ## 前置条件
 
 - Docker（含 `docker compose`）

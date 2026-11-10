@@ -5,6 +5,42 @@
 
 ---
 
+## 部署方式：先做这个选择
+
+两种模式用同一个镜像，**在 §2 生成 `.env` 时就要定下来**。
+
+| | A. 本地部署 | B. 海外服务器 |
+| --- | --- | --- |
+| 隔离性 | 容器与本地环境完全隔离，宿主机不用装任何依赖 | 同样的隔离 |
+| 网络 | 走宿主机出口；宿主机开着 TUN 代理时容器流量已被接管 | 直连 Claude，无地区限制，最稳 |
+| 成本 | 用已有机器，零额外成本 | 一台服务器可跑多实例，摊薄到每人很低 |
+| 访问 | 本机 / 局域网 | 公网，必须密码 + TLS |
+| `ENABLE_PROXY` | `auto`（让容器自己判断） | 通常 `0`，海外直连即可 |
+| `ENABLE_CLASH_VERGE` | 要改订阅时 `1` | 通常 `0`，省内存 |
+
+### B 模式的额外要求
+
+1. `.env` 里**固定** `XPRA_PASSWORD`，不要依赖日志里的随机密码
+2. 前置 Caddy / Nginx 做 TLS，反代到 `127.0.0.1:14500`
+3. 安全组只放行 443，不要把 14500 直接暴露到公网
+4. 需要多人共用时按下面的方式起多实例
+
+### 多实例
+
+compose 里没有固定 `container_name`，用 `-p` 指定项目名即可起多套，
+容器、数据卷、密码互相独立：
+
+```bash
+XPRA_PORT=14500 docker compose -p claude-a up -d
+XPRA_PORT=14501 docker compose -p claude-b up -d
+```
+
+- 数据卷：`claude-a_claude-data`、`claude-b_claude-data`
+- 后续所有命令把 `docker compose` 换成 `docker compose -p claude-a` 即可
+- 反向代理按域名或路径分流到各自的 `XPRA_PORT`
+
+---
+
 ## 0. 目标与约束
 
 把 Claude Desktop 跑在容器里，通过 Xpra 转发到一个可访问的端口；必要时让容器的 Claude 走容器内的 Clash。
