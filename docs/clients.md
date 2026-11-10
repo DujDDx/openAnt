@@ -16,10 +16,15 @@
 
 ## macOS
 
+**不用 Homebrew 也可以**（这条路径实测过）：从 <https://xpra.org/stable/MacOS/arm64/Xpra.dmg> 下载（Intel 机器换成 `x86_64`），把 `Xpra.app` 拖进 `/Applications`，然后：
+
 ```bash
-brew install --cask xpra
-xpra attach tcp://<宿主机IP>:14500/
+printf '%s' '<访问密码>' > ~/.xpra-pass && chmod 600 ~/.xpra-pass
+/Applications/Xpra.app/Contents/MacOS/Xpra attach tcp://127.0.0.1:14500/ --password-file=$HOME/.xpra-pass
 ```
+
+> 注意 `--password=` 这个写法不被识别，会弹图形密码框；要用 `--password-file`。
+> 从别的机器连接时把 `127.0.0.1` 换成宿主机的局域网地址或 `xxx.local` 主机名。
 
 常用参数：
 
