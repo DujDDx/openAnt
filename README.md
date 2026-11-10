@@ -171,6 +171,12 @@ docker compose up -d
 
 包里同时带 `claude-desktop-xpra:latest` 和 `:working` 两个 tag，`docker compose up -d` 会直接用导入的镜像，不会重新构建。
 
+**镜像里不含任何个人数据。** Clash 订阅、Claude 登录态、访问密码、Xpra 会话都存放在 `claude-data` 卷里，`docker save` 只打包镜像层。分发前可以跑一次检查：
+
+```bash
+make verify-clean     # 镜像干净：无登录态、无订阅配置
+```
+
 ## 数据持久化
 
 `docker-compose.yml` 使用命名卷 `claude-data` 挂载到 `/home/claude`，保存：

@@ -2,7 +2,7 @@ IMAGE    ?= claude-desktop-xpra:latest
 REPO     ?= claude-desktop-xpra
 COMPOSE  ?= docker compose
 
-.PHONY: help build up down restart logs shell password clash save clean
+.PHONY: help build up down restart logs shell password clash save verify-clean clean
 
 help:
 	@echo "build     构建镜像"
@@ -14,6 +14,7 @@ help:
 	@echo "password  查看当前访问密码"
 	@echo "clash     在会话里打开 Clash Verge 窗口（改订阅用）"
 	@echo "save      把当前镜像导出到 dist/，用于离线分发"
+	@echo "verify-clean  检查镜像里有没有登录态或订阅残留（分发前跑）"
 	@echo "clean     停止并删除数据卷（会丢失登录态）"
 
 build:
@@ -51,3 +52,13 @@ save:
 	docker tag $(IMAGE) $(REPO):working
 	docker save $(IMAGE) $(REPO):working | gzip -1 > dist/$(REPO)-$(shell date +%Y-%m-%d).tar.gz
 	@ls -lh dist/$(REPO)-*.tar.gz | tail -1
+
+# 分发前检查：/home/claude 下不应有任何用户数据，也不应有订阅配置残留
+verify-clean:
+	@docker run --rm --entrypoint bash $(IMAGE) -c '\
+		set -e; \
+		n=$$(find /home/claude/.config/Claude /home/claude/.local/share /home/claude/.cache -type f 2>/dev/null | wc -l); \
+		if [ "$$n" != "0" ]; then echo "发现 $$n 个用户数据文件，不能分发"; exit 1; fi; \
+		hits=$$(grep -rIl -e "ai00.de" -e "388898.xyz" -e "sufe.us" -e "\.ai00\." /etc /home /opt /var 2>/dev/null | wc -l); \
+		if [ "$$hits" != "0" ]; then echo "发现订阅配置残留"; exit 1; fi; \
+		echo "镜像干净：无登录态、无订阅配置"'
