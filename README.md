@@ -2,6 +2,8 @@
 
 在 Docker 里运行 **Claude Desktop**，通过 [Xpra](https://github.com/Xpra-org/xpra) 把它的图形界面转发到**任何一台电脑**——客户端只需要一个浏览器，或者一个原生 Xpra 客户端。宿主机不需要安装任何桌面环境、X11 或显卡驱动。
 
+> **如果你是 AI Agent，请阅读 [GUIDE.md](GUIDE.md) 来完成配置流程。**
+
 ## 它是怎么工作的
 
 ```
@@ -275,16 +277,21 @@ Xpra 默认双向同步剪贴板。浏览器出于安全限制可能需要你允
 
 ```
 .
-├── Dockerfile              # 镜像定义：Ubuntu + Xpra + Claude Desktop
+├── README.md               # 面向人类的使用说明
+├── GUIDE.md                # 面向 AI Agent 的部署与配置手册
+├── Dockerfile              # 镜像定义：Ubuntu + Xpra + Claude Desktop + Clash
 ├── docker-compose.yml      # 一键启动
 ├── .env.example            # 配置模板
-├── Makefile                # 常用命令封装
+├── Makefile                # 常用命令封装（make help 查看）
 ├── scripts/
-│   ├── entrypoint.sh       # 容器入口：准备环境 + 启动 Xpra
-│   ├── start-session.sh    # Xpra 子会话：clash-verge + claude-desktop
-│   └── open-browser.sh     # xdg-open 的浏览器入口
+│   ├── entrypoint.sh       # 容器入口：生成密码、清理 X lock、启动 Xpra
+│   ├── start-session.sh    # 会话编排：GUI、托管内核、代理决策、启动 Claude
+│   ├── clash-gui.sh        # 打开 Clash GUI 前先停掉托管内核
+│   ├── clash-verge-config.desktop  # 同上，供 Xpra 应用菜单使用
+│   └── open-browser.sh     # xdg-open 的浏览器入口（OAuth 登录）
 ├── docs/
 │   └── clients.md          # 各平台客户端连接说明
+├── dist/                   # 离线安装包与导出的镜像（git 忽略）
 └── .github/workflows/      # 多架构镜像构建
 ```
 
