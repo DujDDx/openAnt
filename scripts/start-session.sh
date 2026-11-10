@@ -203,5 +203,12 @@ if [[ -n "${CLAUDE_ARGS:-}" ]]; then
     read -r -a app_args <<< "${CLAUDE_ARGS}"
 fi
 
-log "启动 Claude Desktop..."
-exec claude-desktop "${app_args[@]}"
+# 守护运行 Claude：它退出后自动重启，而不是让整个 Xpra 会话跟着结束。
+# 这样 `make claude-restart` 只影响 Claude 本身，Clash 窗口、代理内核和
+# 浏览器/原生客户端的连接都不会断。想结束整个会话就停容器。
+while true; do
+    log "启动 Claude Desktop..."
+    claude-desktop "${app_args[@]}" || true
+    log "Claude Desktop 已退出，3 秒后重启（停容器可结束会话）"
+    sleep 3
+done

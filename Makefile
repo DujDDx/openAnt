@@ -2,7 +2,7 @@ IMAGE    ?= claude-desktop-xpra:latest
 REPO     ?= claude-desktop-xpra
 COMPOSE  ?= docker compose
 
-.PHONY: help build up down restart logs shell password clash save verify-clean clean
+.PHONY: help build up down restart logs shell password clash claude-restart save verify-clean clean
 
 help:
 	@echo "build     构建镜像"
@@ -13,6 +13,7 @@ help:
 	@echo "shell     进入容器"
 	@echo "password  查看当前访问密码"
 	@echo "clash     在会话里打开 Clash Verge 窗口（改订阅用）"
+	@echo "claude-restart  只重启 Claude，会话、Clash 窗口都不断"
 	@echo "save      把当前镜像导出到 dist/，用于离线分发"
 	@echo "verify-clean  检查镜像里有没有登录态或订阅残留（分发前跑）"
 	@echo "clean     停止并删除数据卷（会丢失登录态）"
@@ -42,6 +43,10 @@ clash:
 	$(COMPOSE) exec -d claude-desktop /usr/local/bin/clash-gui.sh
 	@sleep 12
 	@$(COMPOSE) exec -T claude-desktop bash -lc 'if pgrep -x verge-mihomo >/dev/null; then echo "Clash 窗口已打开，内核已在运行"; else echo "Clash 窗口已打开；如果它提示「需要更新系统服务」，在窗口里点「继续使用 SIDECAR」即可"; fi'
+
+# 只重启 Claude：会话脚本用循环守护它，Xpra、Clash 窗口和代理内核都不受影响
+claude-restart:
+	$(COMPOSE) exec -T claude-desktop /usr/local/bin/claude-restart.sh
 
 clean:
 	$(COMPOSE) down -v

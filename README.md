@@ -317,6 +317,15 @@ services:
 （`WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1`），因为容器的 bwrap 沙箱建不起来，
 不开就会直接崩。如果仍然没有窗口，看 `~/.cache/claude-xpra/` 下的日志。
 
+**Claude 卡在错误页 / 白屏，但不想断开会话**
+
+```bash
+make claude-restart
+```
+
+只结束并重新拉起 Claude，Xpra 会话、Clash 窗口和代理内核都不受影响。
+会话脚本在容器内守护 Claude，所以它意外退出也会在 3 秒后自己回来。
+
 **页面能打开，登录后一直白屏**
 容器内 Chromium 共享内存不足。确认 `shm_size: "1gb"` 生效，或给 `CLAUDE_ARGS` 加上 `--disable-dev-shm-usage`。
 
@@ -372,13 +381,17 @@ Xpra 默认双向同步剪贴板。浏览器出于安全限制可能需要你允
 ## 开发
 
 ```bash
-make build     # 构建镜像
-make up        # 启动
-make logs      # 跟踪日志
-make shell     # 进入容器
-make password  # 查看当前密码
-make down      # 停止
-make clean     # 停止并删除数据卷（会丢失登录态）
+make build            # 构建镜像
+make up               # 启动
+make logs             # 跟踪日志
+make shell            # 进入容器
+make password         # 查看当前密码
+make clash            # 在会话里打开 Clash Verge 窗口
+make claude-restart   # 只重启 Claude，会话和 Clash 都不断
+make save             # 导出可分发镜像到 dist/
+make verify-clean     # 分发前确认镜像不含个人数据
+make down             # 停止
+make clean            # 停止并删除数据卷（会丢失登录态）
 ```
 
 ## 致谢

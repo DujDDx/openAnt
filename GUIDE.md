@@ -277,7 +277,8 @@ docker compose exec -T claude-desktop bash -lc \
 | `no password defined for 'claude'` | 用了 `--tcp-auth=password` | 必须用 `file:filename=<密码文件>`，已在 entrypoint 修好 |
 | 容器无限重启，日志 `Server is already active for display 100` | restart 保留了 `/tmp`，残留 X lock | entrypoint 已清理；若手工改过脚本，别删这段 |
 | Clash 弹窗「已有内核进程正在运行」 | 容器托管内核与 GUI 抢 7897 | 用 `make clash` 打开 GUI（它会先停内核） |
-| `ERR_PROXY_CONNECTION_FAILED` | `ENABLE_PROXY=1` 但 7897 没监听 | 先点 Sidecar 把内核拉起来，再点 Claude 页面的「重新加载」 |
+| Claude 卡在错误页 / 白屏 | 需要重启它但不想断会话 | `make claude-restart`：只结束并重拉 Claude，Xpra、Clash 窗口、代理内核都不受影响 |
+| `ERR_PROXY_CONNECTION_FAILED` | `ENABLE_PROXY=1` 但 7897 没监听 | 先点 Sidecar 把内核拉起来，再 `make claude-restart` |
 | `App unavailable in region` | 直连出口地区不对 | 走代理（`ENABLE_PROXY=1` + 可用节点） |
 | Clash 解锁测试里 Claude ❌ | 节点本身过不了 Claude | 换节点，与本项目无关 |
 | 浏览器页面变回 `connect.html` | 客户端掉线 | 刷新重连，服务端不受影响 |
@@ -333,6 +334,7 @@ make save             # 产出 dist/claude-desktop-xpra-<日期>.tar.gz
 | `scripts/entrypoint.sh` | 生成/读取密码、清理 X lock、启动 Xpra（`file` 认证 + HTML5） |
 | `scripts/start-session.sh` | 会话编排：GUI、托管内核、代理决策、启动 Claude |
 | `scripts/clash-gui.sh` | 打开 Clash GUI 前先停掉托管内核 |
+| `scripts/claude-restart.sh` | 只重启 Claude，不动会话；配合会话脚本的守护循环使用 |
 | `scripts/open-browser.sh` | OAuth 登录用的浏览器入口（Epiphany） |
 | `dist/` | 离线安装包与导出的镜像（已在 `.gitignore` 里） |
 
