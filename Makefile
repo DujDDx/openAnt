@@ -1,7 +1,8 @@
 IMAGE    ?= claude-desktop-xpra:latest
+REPO     ?= claude-desktop-xpra
 COMPOSE  ?= docker compose
 
-.PHONY: help build up down restart logs shell password clean clash
+.PHONY: help build up down restart logs shell password clash save clean
 
 help:
 	@echo "build     构建镜像"
@@ -12,6 +13,7 @@ help:
 	@echo "shell     进入容器"
 	@echo "password  查看当前访问密码"
 	@echo "clash     在会话里打开 Clash Verge 窗口（改订阅用）"
+	@echo "save      把当前镜像导出到 dist/，用于离线分发"
 	@echo "clean     停止并删除数据卷（会丢失登录态）"
 
 build:
@@ -42,3 +44,10 @@ clash:
 
 clean:
 	$(COMPOSE) down -v
+
+# 导出成可迁移的 tar.gz；同时带上 latest 和 working 两个 tag
+save:
+	@mkdir -p dist
+	docker tag $(IMAGE) $(REPO):working
+	docker save $(IMAGE) $(REPO):working | gzip -1 > dist/$(REPO)-$(shell date +%Y-%m-%d).tar.gz
+	@ls -lh dist/$(REPO)-*.tar.gz | tail -1

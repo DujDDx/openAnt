@@ -154,6 +154,23 @@ dist/clash-verge.deb      # Clash Verge Rev 的 .deb
 docker compose build
 ```
 
+### 分发镜像
+
+目标机器不需要构建，可以直接导入现成的镜像：
+
+```bash
+make save     # 导出 dist/claude-desktop-xpra-<日期>.tar.gz（约 850 MB）
+```
+
+把文件拷到目标机器后：
+
+```bash
+docker load < claude-desktop-xpra-2026-11-10.tar.gz
+docker compose up -d
+```
+
+包里同时带 `claude-desktop-xpra:latest` 和 `:working` 两个 tag，`docker compose up -d` 会直接用导入的镜像，不会重新构建。
+
 ## 数据持久化
 
 `docker-compose.yml` 使用命名卷 `claude-data` 挂载到 `/home/claude`，保存：
