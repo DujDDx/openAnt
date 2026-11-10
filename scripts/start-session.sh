@@ -79,6 +79,8 @@ if [[ "${ENABLE_CLASH_VERGE:-0}" != "0" ]] && command -v clash-verge >/dev/null 
     clash_pid=$!
 fi
 
+
+
 # ---------------------------------------------------------------- 托管内核 ---
 # GUI 没开的时候，由容器自己把 mihomo 拉起来：不开窗口、不用点任何确认。
 clash_wait=0
