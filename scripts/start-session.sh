@@ -164,8 +164,14 @@ if [[ "${proxy_mode}" = "auto" ]]; then
     # 很多环境（包括宿主机开着 TUN 代理）里容器本身就能出网，再套一层
     # 容器内 Clash 只会多一跳、多一组可能挂掉的节点，反而不稳定。
     if [[ "${clash_listening}" = "1" && "${clash_profile_active}" = "1" ]]; then
-        if curl -sS -m 8 -o /dev/null "https://api.anthropic.com" >/dev/null 2>&1; then
-            direct_ok=1
+        # 网络会抖，单个探测点容易误判：两个域名任意一个可达就算直连可用
+        for probe in "https://api.anthropic.com" "https://claude.ai"; do
+            if curl -sS -m 10 -o /dev/null "${probe}" >/dev/null 2>&1; then
+                direct_ok=1
+                break
+            fi
+        done
+        if [[ "${direct_ok}" = "1" ]]; then
             proxy_mode=0
         else
             proxy_mode=1
