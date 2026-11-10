@@ -1,8 +1,37 @@
 # openAnt
 
-在 Docker 里运行 **Claude Desktop**，通过 [Xpra](https://github.com/Xpra-org/xpra) 把它的图形界面转发到**任何一台电脑**——客户端只需要一个浏览器，或者一个原生 Xpra 客户端。宿主机不需要安装任何桌面环境、X11 或显卡驱动。
+**把 Claude Desktop 装进 Docker，用 Xpra 转发到任何一台电脑。**
+
+客户端只要一个浏览器（或原生 Xpra 客户端），宿主机不需要 X11、桌面环境或显卡驱动。容器内自带 Clash Verge，订阅和节点在同一个界面里配置。
+
+![license](https://img.shields.io/badge/license-MIT-blue)
+![platform](https://img.shields.io/badge/platform-linux%2Famd64%20%7C%20arm64-lightgrey)
+![base](https://img.shields.io/badge/base-Ubuntu%2024.04-E95420)
+![xpra](https://img.shields.io/badge/xpra-6.x-informational)
 
 > **如果你是 AI Agent，请阅读 [GUIDE.md](GUIDE.md) 来完成配置流程。**
+
+## 特性
+
+- **一条命令跑起来**：`docker compose up -d --build`，除此之外没有别的依赖
+- **断开不丢会话**：关掉浏览器、换一台电脑，Claude 仍在容器里运行，重连即回到原状态——这是 Xpra 相对 VNC 的核心优势
+- **容器内代理**：内置 Clash Verge Rev，订阅、节点、规则都在转发的窗口里配置；`ENABLE_PROXY=auto` 会按实际连通性决定 Claude 走不走代理
+- **两种部署方式**：本地跑（与宿主机环境完全隔离）或海外服务器（直连更稳，一台机器可跑多实例摊薄成本）
+- **构建不怕断网**：apt、Anthropic 官方源、GitHub 都有多级回退；也可以把安装包放进 `dist/` 完全离线构建
+- **多架构**：amd64 与 arm64，GitHub Actions 自动构建
+
+## 目录
+
+- [它是怎么工作的](#它是怎么工作的)
+- [两种部署方式](#两种部署方式)
+- [快速开始](#快速开始)
+- [首次登录](#首次登录)
+- [在容器里配置 Clash Verge 代理](#在容器里配置-clash-verge-代理)
+- [配置项](#配置项)
+- [构建时的网络回退](#构建时的网络回退)
+- [数据持久化](#数据持久化) · [安全说明](#安全说明)
+- [常见问题](#常见问题)
+- [项目结构](#项目结构) · [开发](#开发)
 
 ## 它是怎么工作的
 
@@ -80,7 +109,7 @@ XPRA_PORT=14501 docker compose -p claude-b up -d
 ## 快速开始
 
 ```bash
-git clone <本仓库地址> openAnt
+git clone https://github.com/<你的账号>/openAnt.git
 cd openAnt
 cp .env.example .env
 docker compose up -d --build
@@ -101,10 +130,10 @@ docker compose logs claude-desktop | grep 密码
 HTML5 客户端够用，但原生客户端的延迟、缩放和快捷键体验更好：
 
 ```bash
-# macOS
+# macOS（没有 Homebrew 也可以，官方 DMG 的装法见 docs/clients.md）
 brew install --cask xpra
 
-# 连接
+# 连接，首次会提示输入密码
 xpra attach tcp://192.168.1.10:14500/
 ```
 
@@ -352,6 +381,14 @@ make down      # 停止
 make clean     # 停止并删除数据卷（会丢失登录态）
 ```
 
----
+## 致谢
 
-Claude Desktop 由 Anthropic 提供，本仓库只负责打包与远程显示。Xpra 以 GPLv2+ 发布，见其[上游仓库](https://github.com/Xpra-org/xpra)。
+- [Xpra](https://github.com/Xpra-org/xpra) — 远程显示，GPLv2+
+- [claude-desktop-debian](https://github.com/aaddrick/claude-desktop-debian) — 官方源不可用时的社区重打包版本
+- [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev) — 容器内代理客户端
+
+Claude Desktop 由 Anthropic 提供，本仓库只负责打包与远程显示，与 Anthropic 没有隶属关系。
+
+## 许可证
+
+[MIT](LICENSE)

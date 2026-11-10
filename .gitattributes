@@ -1,0 +1,13 @@
+# 统一换行，避免 Windows 检出把 shell 脚本变成 CRLF 导致容器启动失败
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.py   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf
+
+*.png  binary
+*.jpg  binary
+*.gz   binary
+*.deb  binary
